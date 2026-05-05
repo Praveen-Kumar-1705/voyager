@@ -63,26 +63,22 @@ app.post('/generate', async (req, res) => {
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const result = await model.generateContent(prompt);
-    let text = result.response.text();
+let text = result.response.text();
 
-    // Strip markdown code fences Gemini sometimes adds
-    text = text
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```\s*$/i, '')
-      .trim();
+// Clean unwanted markdown if any
+text = text.replace(/```json|```/g, '').trim();
 
-    // Extract the JSON object if there is surrounding text
-    const jsonStart = text.indexOf('{');
-    const jsonEnd   = text.lastIndexOf('}');
-    if (jsonStart !== -1 && jsonEnd !== -1) {
-      text = text.slice(jsonStart, jsonEnd + 1);
-    }
+// Try parsing BEFORE sending to frontend
+let parsed;
+try {
+  parsed = JSON.parse(text);
+} catch (e) {
+  console.error("INVALID JSON FROM GEMINI:\n", text);
+  return res.status(500).json({ error: "Invalid JSON from AI" });
+}
 
-    // Validate JSON before sending — catches broken responses early
-    JSON.parse(text);
-
-    res.json({ result: text });
+// Send proper JSON
+res.json(parsed);
 
   } catch (err) {
     console.error("ERROR:", err.message);

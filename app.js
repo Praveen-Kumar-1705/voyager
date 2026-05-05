@@ -358,8 +358,9 @@ async function generateItinerary() {
 
     let itinerary;
     try {
-      const clean = data.result.replace(/```json|```/g, '').trim();
-      itinerary = JSON.parse(clean);
+     
+const clean = data.result.replace(...);
+itinerary = JSON.parse(clean);
     } catch {
       throw new Error('Could not parse itinerary. Please try again.');
     }

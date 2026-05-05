@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: voyager-travel-planner
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false   # You'll paste this manually in the Render dashboard

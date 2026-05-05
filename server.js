@@ -2,12 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// ✅ CREATE app FIRST (this was missing)
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 🔐 API key loaded from environment variable (set in Render dashboard)
-const genAI = new GoogleGenerativeAI("AIzaSyAMBphNHZWEf2XWmpk2nqrubxxJ2I17Htc");
+// API key from Render environment variable
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -18,7 +17,7 @@ app.post('/generate', async (req, res) => {
     const { destination, days, budget, interests } = req.body;
 
     const prompt = `
-    Plan a ${days}-day trip to ${destination} with budget ₹${budget}.
+    Plan a ${days}-day trip to ${destination} with budget Rs.${budget}.
     Interests: ${interests}.
     
     Return ONLY valid JSON (no markdown, no backticks) in this EXACT format:
@@ -26,12 +25,12 @@ app.post('/generate', async (req, res) => {
       "title": "string — catchy trip title",
       "summary": "string — 2-sentence overview",
       "estimatedCosts": {
-        "flight": "₹XX,XXX",
-        "hotel": "₹XX,XXX",
-        "transport": "₹X,XXX",
-        "food": "₹X,XXX",
-        "activities": "₹X,XXX",
-        "total": "₹XX,XXX"
+        "flight": "Rs.XX,XXX",
+        "hotel": "Rs.XX,XXX",
+        "transport": "Rs.X,XXX",
+        "food": "Rs.X,XXX",
+        "activities": "Rs.X,XXX",
+        "total": "Rs.XX,XXX"
       },
       "days": [
         {
@@ -40,17 +39,17 @@ app.post('/generate', async (req, res) => {
           "theme": "string — one-line vibe for the day",
           "date": "Day 1",
           "activities": [
-            "09:00 AM — Visit XYZ (Entry: ₹500 | Approx 2 hrs)",
-            "12:00 PM — Lunch at ABC Restaurant (₹600–₹900 per person)",
-            "03:00 PM — Activity Name (₹1,200 per person | Approx 3 hrs)",
-            "07:00 PM — Evening activity (Free / ₹XXX)"
+            "09:00 AM — Visit XYZ (Entry: Rs.500 | Approx 2 hrs)",
+            "12:00 PM — Lunch at ABC Restaurant (Rs.600-Rs.900 per person)",
+            "03:00 PM — Activity Name (Rs.1,200 per person | Approx 3 hrs)",
+            "07:00 PM — Evening activity (Free / Rs.XXX)"
           ],
           "meals": {
-            "breakfast": "Place name + approx cost e.g. Hotel buffet ₹400",
+            "breakfast": "Place name + approx cost e.g. Hotel buffet Rs.400",
             "lunch": "Place name + approx cost",
             "dinner": "Place name + approx cost"
           },
-          "dailyCost": "₹X,XXX–₹X,XXX",
+          "dailyCost": "Rs.X,XXX-Rs.X,XXX",
           "tips": "One actionable local tip for the day"
         }
       ],
@@ -58,33 +57,47 @@ app.post('/generate', async (req, res) => {
       "importantNotes": ["note1","note2"]
     }
     
-    CRITICAL: Every activity in the "activities" array MUST include a time, description, AND a cost estimate in ₹. Format: "HH:MM AM/PM — Activity description (₹cost or Free)". Never omit the cost.
+    CRITICAL: Every activity in the activities array MUST include a time, description, AND a cost estimate. Format: HH:MM AM/PM - Activity description (Rs.cost or Free). Never omit the cost. Return raw JSON only, no markdown fences.
     `;
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-3-flash-preview"
-    });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    let text = result.response.text();
+
+    // Strip markdown code fences Gemini sometimes adds
+    text = text
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```\s*$/i, '')
+      .trim();
+
+    // Extract the JSON object if there is surrounding text
+    const jsonStart = text.indexOf('{');
+    const jsonEnd   = text.lastIndexOf('}');
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+      text = text.slice(jsonStart, jsonEnd + 1);
+    }
+
+    // Validate JSON before sending — catches broken responses early
+    JSON.parse(text);
 
     res.json({ result: text });
 
   } catch (err) {
-    console.error("GEMINI ERROR:", err);
-    res.status(500).json({ error: "Gemini failed" });
+    console.error("ERROR:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Health check endpoint for Render
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'Voyager Travel Planner' });
 });
 
 app.listen(PORT, () => {
-    console.log(`
-✦ VOYAGER Travel Planner Server Running
-🌐 Port: ${PORT}
-🤖 Gemini API: ${process.env.GEMINI_API_KEY ? 'Connected ✓' : 'MISSING KEY ✗'}
+  console.log(`
+VOYAGER Travel Planner Running
+Port: ${PORT}
+Gemini API: ${process.env.GEMINI_API_KEY ? 'Connected' : 'MISSING KEY - set GEMINI_API_KEY in Render dashboard'}
 `);
 });
